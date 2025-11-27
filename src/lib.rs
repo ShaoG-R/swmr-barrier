@@ -39,3 +39,24 @@ pub fn heavy_barrier() {
 pub fn light_barrier() {
     sys::light_barrier_impl();
 }
+
+/// **Check Acceleration Status**
+///
+/// Returns `true` if OS-accelerated barriers are in use.
+///
+/// * **Linux (Kernel 4.14+)**: Returns `true` if `MEMBARRIER_CMD_PRIVATE_EXPEDITED` is available.
+/// * **Windows (Vista+)**: Always returns `true`.
+/// * **Other platforms / Loom**: Always returns `false`.
+///
+/// ---
+///
+/// **检查加速状态**
+///
+/// 如果正在使用 OS 加速屏障，返回 `true`。
+///
+/// * **Linux (Kernel 4.14+)**：如果 `MEMBARRIER_CMD_PRIVATE_EXPEDITED` 可用，返回 `true`。
+#[inline]
+#[cfg(target_os = "linux")]
+pub fn is_accelerated() -> bool {
+    sys::is_accelerated_impl()
+}

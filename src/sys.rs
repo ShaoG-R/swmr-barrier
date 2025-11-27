@@ -130,6 +130,13 @@ cfg_if! {
                 fence(Ordering::SeqCst);
             }
         }
+
+        /// Returns whether OS-accelerated barriers (membarrier) are in use.
+        /// 返回是否正在使用 OS 加速屏障（membarrier）。
+        #[inline]
+        pub(crate) fn is_accelerated_impl() -> bool {
+            IS_ACCELERATED.load(Ordering::Relaxed)
+        }
     }
 
 // ============================================================================

@@ -1,8 +1,8 @@
 # swmr-barrier: Asymmetric Heavy-Light Barrier
 
-[![Crates.io](https://img.shields.io/crates/v/swmr-barrier.svg)](https://crates.io/crates/swmr-barrier)
-[![License](https://img.shields.io/crates/l/swmr-barrier.svg)](https://github.com/ShaoG-R/swmr-barrier#license)
-[![Docs.rs](https://docs.rs/swmr-barrier/badge.svg)](https://docs.rs/swmr-barrier)
+[![Crates.io](https://img.shields.io/crates/v/swmr-barrier)](https://crates.io/crates/swmr-barrier)
+[![Documentation](https://docs.rs/swmr-barrier/badge.svg)](https://docs.rs/swmr-barrier)
+[![License](https://img.shields.io/crates/l/swmr-barrier)](LICENSE-MIT)
 
 [中文文档](./README_CN.md)
 
@@ -14,9 +14,9 @@ On supported platforms (Linux & Windows), the Light Barrier compiles down to a m
 
 - **Zero-Cost Readers**: On supported platforms, `light_barrier()` has no runtime CPU instructions (just a compiler fence).
 - **OS-Hardware Acceleration**:
-  - **Linux**: Uses `membarrier` (Private Expedited).
+  - **Linux**: Directly invokes `syscall(SYS_membarrier, PRIVATE_EXPEDITED)` via `libc`.
   - **Windows**: Uses `FlushProcessWriteBuffers`.
-- **Automatic Fallback**: Safely degrades to `std::sync::atomic::fence(SeqCst)` on unsupported platforms (macOS, older Linux/Windows) or if runtime initialization fails.
+- **Automatic Fallback**: Safely degrades to `std::sync::atomic::fence(SeqCst)` on unsupported platforms (macOS, older Linux kernels, older Windows) or if runtime initialization fails.
 - **Loom Support**: Built-in support for [Loom](https://github.com/tokio-rs/loom) concurrency testing.
 
 ## Usage
@@ -78,13 +78,13 @@ fn main() {
 
 | Platform | Implementation | Overhead (Reader) | Overhead (Writer) |
 |----------|----------------|-------------------|-------------------|
-| **Linux** (Kernel 4.14+) | `sys_membarrier(PRIVATE_EXPEDITED)` | **Zero** (Compiler Fence) | High (IPI Broadcast) |
-| **Linux** (Older Kernels) | `mprotect()` trick | **Zero** (Compiler Fence) | High (TLB Flush) |
+| **Linux** (Kernel 4.14+) | `syscall(SYS_membarrier, PRIVATE_EXPEDITED)` | **Zero** (Compiler Fence) | High (IPI Broadcast) |
+| **Linux** (Older Kernels) | `fence(SeqCst)` fallback | High (CPU Fence) | High (CPU Fence) |
 | **Windows** (Vista+) | `FlushProcessWriteBuffers` | **Zero** (Compiler Fence) | High (System Call) |
 | **macOS / Others** | `fence(SeqCst)` | High (CPU Fence) | High (CPU Fence) |
 | **Loom** | `loom::sync::atomic::fence` | Simulated | Simulated |
 
-*Note: This crate is built on the [`membarrier`](https://crates.io/crates/membarrier) crate, which automatically detects the best strategy at runtime: prefers `sys_membarrier()`, falls back to `mprotect()` on older Linux, and `fence(SeqCst)` on other platforms.*
+*Note: This crate directly uses `libc` to invoke `syscall(SYS_membarrier, ...)` and automatically detects kernel support at runtime. Older Linux kernels (< 4.14) that do not support `MEMBARRIER_CMD_PRIVATE_EXPEDITED` will fall back to `fence(SeqCst)`.*
 
 ## Loom Testing
 

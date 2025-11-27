@@ -78,12 +78,13 @@ fn main() {
 
 | Platform | Implementation | Overhead (Reader) | Overhead (Writer) |
 |----------|----------------|-------------------|-------------------|
-| **Linux** (Kernel 4.14+) | `membarrier(CMD_PRIVATE_EXPEDITED)` | **Zero** (Compiler Fence) | High (IPI Broadcast) |
+| **Linux** (Kernel 4.14+) | `sys_membarrier(PRIVATE_EXPEDITED)` | **Zero** (Compiler Fence) | High (IPI Broadcast) |
+| **Linux** (Older Kernels) | `mprotect()` trick | **Zero** (Compiler Fence) | High (TLB Flush) |
 | **Windows** (Vista+) | `FlushProcessWriteBuffers` | **Zero** (Compiler Fence) | High (System Call) |
 | **macOS / Others** | `fence(SeqCst)` | High (CPU Fence) | High (CPU Fence) |
 | **Loom** | `loom::sync::atomic::fence` | Simulated | Simulated |
 
-*Note: On Linux, the crate automatically detects support for `membarrier` at runtime. If not supported, it falls back to `fence(SeqCst)`.*
+*Note: This crate is built on the [`membarrier`](https://crates.io/crates/membarrier) crate, which automatically detects the best strategy at runtime: prefers `sys_membarrier()`, falls back to `mprotect()` on older Linux, and `fence(SeqCst)` on other platforms.*
 
 ## Loom Testing
 

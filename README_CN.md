@@ -78,12 +78,13 @@ fn main() {
 
 | 平台 | 实现方式 | 开销 (读取者) | 开销 (写入者) |
 |----------|----------------|-------------------|-------------------|
-| **Linux** (Kernel 4.14+) | `membarrier(CMD_PRIVATE_EXPEDITED)` | **零** (编译器屏障) | 高 (IPI 广播) |
+| **Linux** (Kernel 4.14+) | `sys_membarrier(PRIVATE_EXPEDITED)` | **零** (编译器屏障) | 高 (IPI 广播) |
+| **Linux** (旧内核) | `mprotect()` 技巧 | **零** (编译器屏障) | 高 (TLB 刷新) |
 | **Windows** (Vista+) | `FlushProcessWriteBuffers` | **零** (编译器屏障) | 高 (系统调用) |
 | **macOS / 其他** | `fence(SeqCst)` | 高 (CPU 屏障) | 高 (CPU 屏障) |
 | **Loom** | `loom::sync::atomic::fence` | 模拟 | 模拟 |
 
-*注意：在 Linux 上，该库会在运行时自动检测对 `membarrier` 的支持。如果不支持，它将回退到 `fence(SeqCst)`。*
+*注意：本库基于 [`membarrier`](https://crates.io/crates/membarrier) crate 实现，会在运行时自动检测最佳策略：优先使用 `sys_membarrier()`，旧版 Linux 回退到 `mprotect()`，其他平台回退到 `fence(SeqCst)`。*
 
 ## Loom 测试
 

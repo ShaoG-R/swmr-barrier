@@ -16,9 +16,19 @@ default = []
 loom = ["dep:loom"]
 
 [dependencies]
-# Process-wide memory barrier abstraction (handles Linux, Windows, and fallback)
-# 进程级内存屏障抽象（处理 Linux、Windows 和回退）
-membarrier = "0.2"
+cfg-if = "1.0"
+
+# --- Linux Dependencies ---
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+ctor = "0.6.1"
+
+# --- Windows Dependencies ---
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+    "Win32_System_Threading",
+    "Win32_Foundation"
+] }
 
 # --- Loom Dependencies ---
 [dependencies.loom]

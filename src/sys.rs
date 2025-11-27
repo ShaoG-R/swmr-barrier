@@ -44,9 +44,6 @@ cfg_if! {
         const SYS_MEMBARRIER: c_long = libc::SYS_membarrier;
 
         const MEMBARRIER_CMD_QUERY: c_int = 0;
-        const MEMBARRIER_CMD_GLOBAL: c_int = 1;
-        const MEMBARRIER_CMD_GLOBAL_EXPEDITED: c_int = 2;
-        const MEMBARRIER_CMD_REGISTER_GLOBAL_EXPEDITED: c_int = 4;
         const MEMBARRIER_CMD_PRIVATE_EXPEDITED: c_int = 8;
         const MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED: c_int = 16;
 

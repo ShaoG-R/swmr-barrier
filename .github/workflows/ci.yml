@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # 1. Standard Compilation & Testing (Windows, Linux, macOS)
+  # 1. 常规编译与测试 (Windows, Linux, macOS)
+  test:
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    # Use stable toolchain
+    # 使用 stable 工具链
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Build
+      run: cargo build --verbose
+
+    - name: Run tests
+      run: cargo test --verbose
+
+  # 2. Loom Concurrency Model Check (Run on Linux)
+  # 2. Loom 并发模型检查 (运行在 Linux 上即可)
+  loom:
+    name: Loom Model Check
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    # Loom tests are usually slow, so running with --release is recommended.
+    # Specify --features loom to enable the loom feature.
+    # Specify --test loom_test to run only loom-related integration tests.
+    #
+    # Loom 测试通常较慢，建议使用 --release 运行
+    # 指定 --features loom 开启 loom 特性
+    # 指定 --test loom_test 只运行 loom 相关的集成测试
+    - name: Run Loom tests
+      run: cargo test --release --features loom --test loom_test --verbose

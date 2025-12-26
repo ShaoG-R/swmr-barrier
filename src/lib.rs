@@ -57,7 +57,6 @@ pub fn light_barrier() {
 ///
 /// * **Linux (Kernel 4.3+)**：如果 `MEMBARRIER_CMD_PRIVATE_EXPEDITED` (4.14+) 或 `MEMBARRIER_CMD_SHARED` (4.3+) 可用，返回 `true`。
 #[inline]
-#[cfg(all(target_os = "linux", not(feature = "loom")))]
 pub fn is_accelerated() -> bool {
     sys::is_accelerated_impl()
 }

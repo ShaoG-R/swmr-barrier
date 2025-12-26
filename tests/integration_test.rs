@@ -301,3 +301,20 @@ fn test_linux_membarrier_acceleration_enabled() {
     );
     println!("Linux membarrier acceleration is enabled (IS_ACCELERATED = true)");
 }
+
+/// Windows-specific test: Verify that FlushProcessWriteBuffers is available.
+///
+/// On Windows Vista and later, this should always return true.
+///
+/// Windows 专用测试：验证 FlushProcessWriteBuffers 是否可用。
+/// 在 Windows Vista 及更高版本上，这应始终返回 true。
+#[test]
+#[cfg(target_os = "windows")]
+fn test_windows_acceleration_enabled() {
+    assert!(
+        swmr_barrier::is_accelerated(),
+        "acceleration should be enabled on Windows (Vista+). \
+         If this fails, FlushProcessWriteBuffers was not found."
+    );
+    println!("Windows acceleration is enabled (IS_ACCELERATED = true)");
+}

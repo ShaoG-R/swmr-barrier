@@ -25,6 +25,11 @@ cfg_if! {
             // 如果这里只用 compiler_fence，Loom 会认为两条线程没有同步关系。
             loom::sync::atomic::fence(loom::sync::atomic::Ordering::SeqCst);
         }
+
+        #[inline]
+        pub(crate) fn is_accelerated_impl() -> bool {
+            false
+        }
     }
 
 // ============================================================================
@@ -147,33 +152,85 @@ cfg_if! {
     }
 
 // ============================================================================
-// 3. Windows Real Implementation (Assumed to be always supported)
-// 3. Windows 真实实现 (假定总是支持)
+// 3. Windows Implementation
+// 3. Windows 实现
 // ============================================================================
     else if #[cfg(target_os = "windows")] {
-        use windows_sys::Win32::System::Threading::FlushProcessWriteBuffers;
-        use core::sync::atomic::{compiler_fence, Ordering};
+        use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
+        use core::sync::atomic::{compiler_fence, fence, AtomicBool, AtomicPtr, Ordering};
+        use core::ffi::c_void;
 
-        // Windows Vista / Server 2008 and later support this API.
-        // Unless you are running Windows XP, no runtime downgrade check is needed.
-        //
-        // Windows Vista / Server 2008 之后都支持此 API。
-        // 除非你在跑 Windows XP，否则不需要做运行时降级检查。
+        // --------------------------------------------------------------------
+        // State Management
+        // --------------------------------------------------------------------
+        static IS_ACCELERATED: AtomicBool = AtomicBool::new(false);
+        static MB_FN_PTR: AtomicPtr<c_void> = AtomicPtr::new(core::ptr::null_mut());
+
+        // Function signature for FlushProcessWriteBuffers
+        type FnFlushProcessWriteBuffers = unsafe extern "system" fn();
+
+        // --------------------------------------------------------------------
+        // Initialization (runs before main)
+        // 初始化 (在 main 之前运行)
+        // --------------------------------------------------------------------
+        // On Windows MSVC, .CRT$XCU is the section for C++ dynamic initializers.
+        // Rust uses this for its own pre-main code.
+        #[used]
+        #[unsafe(link_section = ".CRT$XCU")]
+        static __INIT: extern "C" fn() = windows_auto_init;
+
+        extern "C" fn windows_auto_init() {
+            unsafe {
+                // 1. Get readable handle to Kernel32.dll (already loaded)
+                let h_kernel32 = GetModuleHandleA(b"kernel32.dll\0".as_ptr());
+                if h_kernel32.is_null() {
+                    return;
+                }
+
+                // 2. Try to find FlushProcessWriteBuffers
+                // It is available on Vista / Server 2008 and later.
+                if let Some(func_ptr) = GetProcAddress(h_kernel32, b"FlushProcessWriteBuffers\0".as_ptr()) {
+                    // Store the function pointer
+                    // Transmute the FARPROC to *mut c_void for storage
+                    MB_FN_PTR.store(func_ptr as *mut c_void, Ordering::Relaxed);
+
+                    // Enable acceleration
+                    IS_ACCELERATED.store(true, Ordering::Relaxed);
+                }
+            }
+        }
 
         #[inline]
         pub(crate) fn heavy_barrier_impl() {
-            unsafe { FlushProcessWriteBuffers(); }
-            compiler_fence(Ordering::SeqCst);
+            // Check if we have the accelerated function
+            if IS_ACCELERATED.load(Ordering::Relaxed) {
+                unsafe {
+                    let ptr = MB_FN_PTR.load(Ordering::Relaxed);
+                    if !ptr.is_null() {
+                        let func: FnFlushProcessWriteBuffers = core::mem::transmute(ptr);
+                        func();
+                    }
+                }
+                compiler_fence(Ordering::SeqCst);
+            } else {
+                // Fallback for XP / Server 2003 or if detection failed
+                fence(Ordering::SeqCst);
+            }
         }
 
         #[inline]
         pub(crate) fn light_barrier_impl() {
-            // Since Windows supports FlushProcessWriteBuffers,
-            // the reader side only needs a compiler barrier.
-            //
-            // Windows 既然支持 FlushProcessWriteBuffers，
-            // 那么读侧只需要编译器屏障即可。
-            compiler_fence(Ordering::SeqCst);
+            if IS_ACCELERATED.load(Ordering::Relaxed) {
+                compiler_fence(Ordering::SeqCst);
+            } else {
+                fence(Ordering::SeqCst);
+            }
+        }
+
+        /// Returns whether OS-accelerated barriers are in use.
+        #[inline]
+        pub(crate) fn is_accelerated_impl() -> bool {
+            IS_ACCELERATED.load(Ordering::Relaxed)
         }
     }
 
@@ -193,7 +250,13 @@ cfg_if! {
         pub(crate) fn light_barrier_impl() {
             // No OS acceleration, both Reader and Writer must use heavy barriers.
             // 没有 OS 加速，读写两端都必须是重屏障
+            // 没有 OS 加速，读写两端都必须是重屏障
             fence(Ordering::SeqCst);
+        }
+
+        #[inline]
+        pub(crate) fn is_accelerated_impl() -> bool {
+            false
         }
     }
 }

@@ -37,7 +37,7 @@ cfg_if! {
 // 2. Linux 真实实现 (直接使用 libc)
 // ============================================================================
     else if #[cfg(target_os = "linux")] {
-        use core::sync::atomic::{fence, compiler_fence, Ordering, AtomicI32};
+        use core::sync::atomic::{fence, compiler_fence, Ordering};
         use libc::{syscall, c_int, c_long};
 
         // --------------------------------------------------------------------
@@ -58,7 +58,7 @@ cfg_if! {
         // --------------------------------------------------------------------
         // Store the membarrier command to use (0 = disabled/fallback, 1 = SHARED, 8 = PRIVATE_EXPEDITED)
         // 存储要使用的 membarrier 命令 (0 = 禁用/回退, 1 = SHARED, 8 = PRIVATE_EXPEDITED)
-        static MEMBARRIER_CMD: AtomicI32 = AtomicI32::new(0);
+        static mut MEMBARRIER_CMD: c_int = 0;
 
         // --------------------------------------------------------------------
         // Initialization (runs before main)
@@ -84,7 +84,7 @@ cfg_if! {
                 if (supported_mask as c_int & MEMBARRIER_CMD_PRIVATE_EXPEDITED) != 0 {
                     let res = syscall(SYS_MEMBARRIER, MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED, 0, 0);
                     if res == 0 {
-                        MEMBARRIER_CMD.store(MEMBARRIER_CMD_PRIVATE_EXPEDITED, Ordering::Relaxed);
+                        MEMBARRIER_CMD = MEMBARRIER_CMD_PRIVATE_EXPEDITED;
                         return;
                     }
                 }
@@ -94,7 +94,7 @@ cfg_if! {
                 // 策略 2: SHARED (Linux 4.3+)
                 // 旧内核的回退方案。比 PRIVATE_EXPEDITED 慢，但在读侧依然是非对称的（对读者友好）。
                 if (supported_mask as c_int & MEMBARRIER_CMD_SHARED) != 0 {
-                    MEMBARRIER_CMD.store(MEMBARRIER_CMD_SHARED, Ordering::Relaxed);
+                    MEMBARRIER_CMD = MEMBARRIER_CMD_SHARED;
                     return;
                 }
             }
@@ -106,7 +106,7 @@ cfg_if! {
 
         #[inline]
         pub(crate) fn heavy_barrier_impl() {
-            let cmd = MEMBARRIER_CMD.load(Ordering::Relaxed);
+            let cmd = unsafe { MEMBARRIER_CMD };
 
             // Check if we are in accelerated mode
             // 检查是否处于加速模式
@@ -136,7 +136,7 @@ cfg_if! {
         pub(crate) fn light_barrier_impl() {
             // CRITICAL: Match the heavy_barrier strategy.
             // 关键：必须与 heavy_barrier 策略匹配。
-            if MEMBARRIER_CMD.load(Ordering::Relaxed) != 0 {
+            if unsafe { MEMBARRIER_CMD } != 0 {
                 compiler_fence(Ordering::SeqCst);
             } else {
                 fence(Ordering::SeqCst);
@@ -147,7 +147,7 @@ cfg_if! {
         /// 返回是否正在使用 OS 加速屏障（membarrier）。
         #[inline]
         pub(crate) fn is_accelerated_impl() -> bool {
-            MEMBARRIER_CMD.load(Ordering::Relaxed) != 0
+            unsafe { MEMBARRIER_CMD != 0 }
         }
     }
 
@@ -157,14 +157,14 @@ cfg_if! {
 // ============================================================================
     else if #[cfg(target_os = "windows")] {
         use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
-        use core::sync::atomic::{compiler_fence, fence, AtomicBool, AtomicPtr, Ordering};
+        use core::sync::atomic::{compiler_fence, fence, Ordering};
         use core::ffi::c_void;
 
         // --------------------------------------------------------------------
         // State Management
         // --------------------------------------------------------------------
-        static IS_ACCELERATED: AtomicBool = AtomicBool::new(false);
-        static MB_FN_PTR: AtomicPtr<c_void> = AtomicPtr::new(core::ptr::null_mut());
+        static mut IS_ACCELERATED: bool = false;
+        static mut MB_FN_PTR: *mut c_void = core::ptr::null_mut();
 
         // Function signature for FlushProcessWriteBuffers
         type FnFlushProcessWriteBuffers = unsafe extern "system" fn();
@@ -192,10 +192,10 @@ cfg_if! {
                 if let Some(func_ptr) = GetProcAddress(h_kernel32, b"FlushProcessWriteBuffers\0".as_ptr()) {
                     // Store the function pointer
                     // Transmute the FARPROC to *mut c_void for storage
-                    MB_FN_PTR.store(func_ptr as *mut c_void, Ordering::Relaxed);
+                    MB_FN_PTR = func_ptr as *mut c_void;
 
                     // Enable acceleration
-                    IS_ACCELERATED.store(true, Ordering::Relaxed);
+                    IS_ACCELERATED = true;
                 }
             }
         }
@@ -203,9 +203,9 @@ cfg_if! {
         #[inline]
         pub(crate) fn heavy_barrier_impl() {
             // Check if we have the accelerated function
-            if IS_ACCELERATED.load(Ordering::Relaxed) {
+            if unsafe { IS_ACCELERATED } {
                 unsafe {
-                    let ptr = MB_FN_PTR.load(Ordering::Relaxed);
+                    let ptr = MB_FN_PTR;
                     if !ptr.is_null() {
                         let func: FnFlushProcessWriteBuffers = core::mem::transmute(ptr);
                         func();
@@ -220,7 +220,7 @@ cfg_if! {
 
         #[inline]
         pub(crate) fn light_barrier_impl() {
-            if IS_ACCELERATED.load(Ordering::Relaxed) {
+            if unsafe { IS_ACCELERATED } {
                 compiler_fence(Ordering::SeqCst);
             } else {
                 fence(Ordering::SeqCst);
@@ -230,7 +230,7 @@ cfg_if! {
         /// Returns whether OS-accelerated barriers are in use.
         #[inline]
         pub(crate) fn is_accelerated_impl() -> bool {
-            IS_ACCELERATED.load(Ordering::Relaxed)
+            unsafe { IS_ACCELERATED }
         }
     }
 
@@ -249,7 +249,6 @@ cfg_if! {
         #[inline]
         pub(crate) fn light_barrier_impl() {
             // No OS acceleration, both Reader and Writer must use heavy barriers.
-            // 没有 OS 加速，读写两端都必须是重屏障
             // 没有 OS 加速，读写两端都必须是重屏障
             fence(Ordering::SeqCst);
         }

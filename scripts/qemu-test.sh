@@ -10,6 +10,9 @@ if [ -z "$TEST_BINARY" ]; then
     exit 1
 fi
 
+# Resolve absolute path
+TEST_BINARY=$(readlink -f "$TEST_BINARY")
+
 echo "Preparing QEMU environment for $TEST_BINARY..."
 
 # 1. Download Alpine 3.7 Kernel (Linux 4.9.65)

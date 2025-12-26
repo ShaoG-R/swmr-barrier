@@ -17,10 +17,34 @@ echo "Preparing QEMU environment for $TEST_BINARY..."
 
 # 1. Download Alpine 3.7 Kernel (Linux 4.9.65)
 # We use 'vanilla' flavor which is more compatible with standard QEMU boot than 'virt' on older versions
-KERNEL_URL="http://dl-cdn.alpinelinux.org/alpine/v3.7/releases/x86_64/netboot/vmlinuz-vanilla"
+# Note: Netboot directory is missing for 3.7, so we extract from ISO.
+ISO_NAME="alpine-vanilla-3.7.3-x86_64.iso"
+ISO_URL="http://dl-cdn.alpinelinux.org/alpine/v3.7/releases/x86_64/$ISO_NAME"
+
 if [ ! -f "vmlinuz-vanilla" ]; then
-    echo "Downloading kernel..."
-    curl -sL -o vmlinuz-vanilla "$KERNEL_URL"
+    if [ ! -f "$ISO_NAME" ]; then
+        echo "Downloading Alpine ISO ($ISO_NAME)..."
+        curl -sL -o "$ISO_NAME" "$ISO_URL"
+    fi
+
+    echo "Extracting kernel from ISO..."
+    # 7z is pre-installed on GitHub Actions ubuntu-latest runners
+    if command -v 7z >/dev/null 2>&1; then
+        7z e "$ISO_NAME" "boot/vmlinuz-vanilla" -y > /dev/null
+    else
+        # Fallback to mount (requires sudo)
+        echo "7z not found, using sudo mount..."
+        mkdir -p mnt_iso
+        sudo mount -o loop "$ISO_NAME" mnt_iso
+        cp mnt_iso/boot/vmlinuz-vanilla .
+        sudo umount mnt_iso
+        rmdir mnt_iso
+    fi
+    
+    if [ ! -f "vmlinuz-vanilla" ]; then
+        echo "Error: Failed to extract vmlinuz-vanilla"
+        exit 1
+    fi
 fi
 
 # 2. Create Initramfs

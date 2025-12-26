@@ -32,7 +32,7 @@ cfg_if! {
 // 2. Linux 真实实现 (直接使用 libc)
 // ============================================================================
     else if #[cfg(target_os = "linux")] {
-        use std::sync::atomic::{fence, compiler_fence, Ordering, AtomicBool};
+        use std::sync::atomic::{fence, compiler_fence, Ordering, AtomicI32};
         use libc::{syscall, c_int, c_long};
 
         // --------------------------------------------------------------------
@@ -44,15 +44,16 @@ cfg_if! {
         const SYS_MEMBARRIER: c_long = libc::SYS_membarrier;
 
         const MEMBARRIER_CMD_QUERY: c_int = 0;
+        const MEMBARRIER_CMD_SHARED: c_int = 1;
         const MEMBARRIER_CMD_PRIVATE_EXPEDITED: c_int = 8;
         const MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED: c_int = 16;
 
         // --------------------------------------------------------------------
         // State Management
         // --------------------------------------------------------------------
-        // Flag: Whether Private Expedited mode is successfully registered.
-        // 标志：私有加速模式是否已成功注册。
-        static IS_ACCELERATED: AtomicBool = AtomicBool::new(false);
+        // Store the membarrier command to use (0 = disabled/fallback, 1 = SHARED, 8 = PRIVATE_EXPEDITED)
+        // 存储要使用的 membarrier 命令 (0 = 禁用/回退, 1 = SHARED, 8 = PRIVATE_EXPEDITED)
+        static MEMBARRIER_CMD: AtomicI32 = AtomicI32::new(0);
 
         // --------------------------------------------------------------------
         // Initialization (runs before main)
@@ -68,19 +69,25 @@ cfg_if! {
                     return;
                 }
 
-                // Check if PRIVATE_EXPEDITED (8) is supported
-                if (supported_mask as c_int & MEMBARRIER_CMD_PRIVATE_EXPEDITED) == 0 {
-                    return;
+                // Strategy 1: PRIVATE_EXPEDITED (Linux 4.14+)
+                // Best performance, requires registration.
+                // 策略 1: PRIVATE_EXPEDITED (Linux 4.14+)
+                // 性能最佳，需要注册。
+                if (supported_mask as c_int & MEMBARRIER_CMD_PRIVATE_EXPEDITED) != 0 {
+                    let res = syscall(SYS_MEMBARRIER, MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED, 0, 0);
+                    if res == 0 {
+                        MEMBARRIER_CMD.store(MEMBARRIER_CMD_PRIVATE_EXPEDITED, Ordering::Relaxed);
+                        return;
+                    }
                 }
 
-                // Step 2: Register
-                // 第二步：注册
-                // This tells the kernel to track this process for IPI barriers.
-                // 告诉内核为当前进程追踪 IPI 屏障。
-                let res = syscall(SYS_MEMBARRIER, MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED, 0, 0);
-
-                if res == 0 {
-                    IS_ACCELERATED.store(true, Ordering::Relaxed);
+                // Strategy 2: SHARED (Linux 4.3+)
+                // Fallback for older kernels. Slower than PRIVATE_EXPEDITED but still asymmetric (good for readers).
+                // 策略 2: SHARED (Linux 4.3+)
+                // 旧内核的回退方案。比 PRIVATE_EXPEDITED 慢，但在读侧依然是非对称的（对读者友好）。
+                if (supported_mask as c_int & MEMBARRIER_CMD_SHARED) != 0 {
+                    MEMBARRIER_CMD.store(MEMBARRIER_CMD_SHARED, Ordering::Relaxed);
+                    return;
                 }
             }
         }
@@ -91,16 +98,18 @@ cfg_if! {
 
         #[inline]
         pub(crate) fn heavy_barrier_impl() {
+            let cmd = MEMBARRIER_CMD.load(Ordering::Relaxed);
+
             // Check if we are in accelerated mode
             // 检查是否处于加速模式
-            if IS_ACCELERATED.load(Ordering::Relaxed) {
+            if cmd != 0 {
                 unsafe {
-                    // Trigger the IPI barrier
-                    // 触发 IPI 屏障
-                    let ret = syscall(SYS_MEMBARRIER, MEMBARRIER_CMD_PRIVATE_EXPEDITED, 0, 0);
+                    // Trigger the IPI barrier (PRIVATE_EXPEDITED or SHARED)
+                    // 触发 IPI 屏障 (PRIVATE_EXPEDITED 或 SHARED)
+                    let ret = syscall(SYS_MEMBARRIER, cmd, 0, 0);
 
-                    // Safety net: if syscall fails (unlikely after registration), fallback.
-                    // 安全网：如果 syscall 失败（注册后不太可能发生），回退。
+                    // Safety net
+                    // 安全网
                     if ret != 0 {
                         fence(Ordering::SeqCst);
                     }
@@ -117,14 +126,9 @@ cfg_if! {
 
         #[inline]
         pub(crate) fn light_barrier_impl() {
-            // CRITICAL: We must match the strategy of heavy_barrier.
-            // If heavy barrier falls back to fence(SeqCst), we MUST also use fence(SeqCst).
-            // A compiler_fence is only sufficient if the other side triggered a real hardware barrier (IPI).
-            //
+            // CRITICAL: Match the heavy_barrier strategy.
             // 关键：必须与 heavy_barrier 策略匹配。
-            // 如果 heavy 屏障回退到了 fence(SeqCst)，我们也必须用 fence(SeqCst)。
-            // 只有当另一端触发了真实的硬件屏障（IPI）时，编译器屏障才是足够的。
-            if IS_ACCELERATED.load(Ordering::Relaxed) {
+            if MEMBARRIER_CMD.load(Ordering::Relaxed) != 0 {
                 compiler_fence(Ordering::SeqCst);
             } else {
                 fence(Ordering::SeqCst);
@@ -135,7 +139,7 @@ cfg_if! {
         /// 返回是否正在使用 OS 加速屏障（membarrier）。
         #[inline]
         pub(crate) fn is_accelerated_impl() -> bool {
-            IS_ACCELERATED.load(Ordering::Relaxed)
+            MEMBARRIER_CMD.load(Ordering::Relaxed) != 0
         }
     }
 

@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main", "test" ]
   pull_request:
-    branches: [ "main", "master" ]
+    branches: [ "main", "test" ]
 
 env:
   CARGO_TERM_COLOR: always
@@ -57,3 +57,40 @@ jobs:
     # 指定 --test loom_test 只运行 loom 相关的集成测试
     - name: Run Loom tests
       run: cargo test --release --features loom --test loom_test --verbose
+
+  # Real Linux Kernel 4.9 Test (via QEMU/Alpine)
+  # 真实 Linux 4.9 内核测试 (通过 QEMU/Alpine)
+  qemu-kernel-4-9:
+    name: Test on Kernel 4.9 (Alpine 3.7)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y qemu-system-x86 musl-tools
+
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: x86_64-unknown-linux-musl
+
+    - name: Build Tests (Musl)
+      run: |
+        cargo test --target x86_64-unknown-linux-musl --no-run
+
+    - name: Run Unit Tests in QEMU
+      run: |
+        chmod +x scripts/qemu-test.sh
+        # Find the unit test binary (crate name swmr-barrier -> swmr_barrier)
+        UNIT_TEST_BIN=$(find target/x86_64-unknown-linux-musl/debug/deps -maxdepth 1 -name "swmr_barrier-*" -type f ! -name "*.*" | head -n 1)
+        echo "Found unit test: $UNIT_TEST_BIN"
+        ./scripts/qemu-test.sh "$UNIT_TEST_BIN"
+
+    - name: Run Integration Tests in QEMU
+      run: |
+        # Find the integration test binary (test name integration_test)
+        INT_TEST_BIN=$(find target/x86_64-unknown-linux-musl/debug/deps -maxdepth 1 -name "integration_test-*" -type f ! -name "*.*" | head -n 1)
+        echo "Found integration test: $INT_TEST_BIN"
+        ./scripts/qemu-test.sh "$INT_TEST_BIN"

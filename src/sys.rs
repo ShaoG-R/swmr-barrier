@@ -67,7 +67,7 @@ cfg_if! {
                 if supported_mask < 0 {
                     return;
                 }
-                
+
                 // Check if PRIVATE_EXPEDITED (8) is supported
                 if (supported_mask as c_int & MEMBARRIER_CMD_PRIVATE_EXPEDITED) == 0 {
                     return;
@@ -78,7 +78,7 @@ cfg_if! {
                 // This tells the kernel to track this process for IPI barriers.
                 // 告诉内核为当前进程追踪 IPI 屏障。
                 let res = syscall(SYS_MEMBARRIER, MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED, 0, 0);
-                
+
                 if res == 0 {
                     IS_ACCELERATED.store(true, Ordering::Relaxed);
                 }
@@ -98,7 +98,7 @@ cfg_if! {
                     // Trigger the IPI barrier
                     // 触发 IPI 屏障
                     let ret = syscall(SYS_MEMBARRIER, MEMBARRIER_CMD_PRIVATE_EXPEDITED, 0, 0);
-                    
+
                     // Safety net: if syscall fails (unlikely after registration), fallback.
                     // 安全网：如果 syscall 失败（注册后不太可能发生），回退。
                     if ret != 0 {
@@ -145,7 +145,7 @@ cfg_if! {
 // ============================================================================
     else if #[cfg(target_os = "windows")] {
         use windows_sys::Win32::System::Threading::FlushProcessWriteBuffers;
-        use std::sync::atomic::{compiler_fence, Ordering};
+        use core::sync::atomic::{compiler_fence, Ordering};
 
         // Windows Vista / Server 2008 and later support this API.
         // Unless you are running Windows XP, no runtime downgrade check is needed.

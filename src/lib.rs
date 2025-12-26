@@ -1,3 +1,4 @@
+#![no_std]
 mod sys;
 
 /// **Heavy Barrier**

@@ -60,7 +60,7 @@ cfg_if! {
         // 初始化 (在 main 之前运行)
         // --------------------------------------------------------------------
         #[used]
-        #[link_section = ".init_array"]
+        #[unsafe(link_section = ".init_array")]
         static __INIT: extern "C" fn() = linux_auto_init;
 
         extern "C" fn linux_auto_init() {

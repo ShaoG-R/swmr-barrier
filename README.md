@@ -13,9 +13,11 @@ On supported platforms (Linux & Windows), the Light Barrier compiles down to a m
 ## Features
 
 - **Zero-Cost Readers**: On supported platforms, `light_barrier()` has no runtime CPU instructions (just a compiler fence).
+- **no_std Compatible**: The core library is `#![no_std]`, making it suitable for embedded or kernel-level programming (requires `libc` on Linux or `windows-sys` on Windows).
 - **OS-Hardware Acceleration**:
   - **Linux**: Directly invokes `syscall(SYS_membarrier, PRIVATE_EXPEDITED)` via `libc`.
-  - **Windows**: Uses `FlushProcessWriteBuffers`.
+  - **Windows**: Dynamically resolves `FlushProcessWriteBuffers` at runtime (safe fallback for older OS).
+- **Minimal Dependencies**: Does not rely on the `ctor` crate. Uses `#[unsafe(link_section = ...)]` for zero-overhead, automatic initialization before `main`.
 - **Automatic Fallback**: Safely degrades to `std::sync::atomic::fence(SeqCst)` on unsupported platforms (macOS, older Linux kernels, older Windows) or if runtime initialization fails.
 - **Loom Support**: Built-in support for [Loom](https://github.com/tokio-rs/loom) concurrency testing.
 
@@ -85,7 +87,7 @@ fn main() {
 | **macOS / Others** | `fence(SeqCst)` | High (CPU Fence) | High (CPU Fence) |
 | **Loom** | `loom::sync::atomic::fence` | Simulated | Simulated |
 
-*Note: This crate directly uses `libc` to invoke `syscall(SYS_membarrier, ...)` and automatically detects kernel support at runtime. Older Linux kernels that do not support `MEMBARRIER_CMD_PRIVATE_EXPEDITED` (pre-4.14) will try `MEMBARRIER_CMD_SHARED` (4.3+). Kernels older than 4.3 will fall back to `fence(SeqCst)`.*
+*Note: This crate directly uses `libc` to invoke `syscall(SYS_membarrier, ...)` and automatically detects kernel support at runtime (using `.init_array` on Linux and `.CRT$XCU` on Windows for early initialization). Older Linux kernels that do not support `MEMBARRIER_CMD_PRIVATE_EXPEDITED` (pre-4.14) will try `MEMBARRIER_CMD_SHARED` (4.3+). Kernels older than 4.3 or Windows versions older than Vista will fall back to `fence(SeqCst)`.*
 
 ## Loom Testing
 

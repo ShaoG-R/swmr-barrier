@@ -13,9 +13,11 @@
 ## 特性
 
 - **零开销读取**：在支持的平台上，`light_barrier()` 没有运行时 CPU 指令（仅编译器屏障）。
+- **支持 no_std**：核心库是 `#![no_std]` 的，适用于嵌入式或内核级编程（Linux 需要 `libc`，Windows 需要 `windows-sys`）。
 - **OS 硬件加速**：
   - **Linux**：直接通过 `libc` 调用 `syscall(SYS_membarrier, PRIVATE_EXPEDITED)`。
-  - **Windows**：使用 `FlushProcessWriteBuffers`。
+  - **Windows**：运行时动态解析 `FlushProcessWriteBuffers`（旧版 OS 安全回退）。
+- **极简依赖**：不依赖 `ctor` crate。使用 `#[unsafe(link_section = ...)]` 实现零开销的 `main` 前自动初始化。
 - **自动回退**：在不支持的平台（macOS、旧版 Linux 内核、旧版 Windows）或运行时初始化失败时，安全退化为 `std::sync::atomic::fence(SeqCst)`。
 - **Loom 支持**：内置支持 [Loom](https://github.com/tokio-rs/loom) 并发测试。
 
@@ -85,7 +87,7 @@ fn main() {
 | **macOS / 其他** | `fence(SeqCst)` | 高 (CPU 屏障) | 高 (CPU 屏障) |
 | **Loom** | `loom::sync::atomic::fence` | 模拟 | 模拟 |
 
-*注意：本库直接使用 `libc` 调用 `syscall(SYS_membarrier, ...)` 系统调用，在运行时自动检测内核支持。不支持 `MEMBARRIER_CMD_PRIVATE_EXPEDITED` 的 Linux 内核（< 4.14）将尝试使用 `MEMBARRIER_CMD_SHARED` (4.3+)。早于 4.3 的内核将回退到 `fence(SeqCst)`。*
+*注意：本库直接使用 `libc` 调用 `syscall(SYS_membarrier, ...)` 系统调用，在运行时自动检测内核支持（Linux 使用 `.init_array`，Windows 使用 `.CRT$XCU` 进行提前初始化）。不支持 `MEMBARRIER_CMD_PRIVATE_EXPEDITED` 的 Linux 内核（< 4.14）将尝试使用 `MEMBARRIER_CMD_SHARED` (4.3+)。早于 4.3 的内核或早于 Vista 的 Windows 将回退到 `fence(SeqCst)`。*
 
 ## Loom 测试
 

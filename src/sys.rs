@@ -59,8 +59,11 @@ cfg_if! {
         // Initialization (runs before main)
         // 初始化 (在 main 之前运行)
         // --------------------------------------------------------------------
-        #[ctor::ctor]
-        fn linux_auto_init() {
+        #[used]
+        #[link_section = ".init_array"]
+        static __INIT: extern "C" fn() = linux_auto_init;
+
+        extern "C" fn linux_auto_init() {
             unsafe {
                 // Step 1: Check kernel support (Query)
                 // 第一步：检查内核支持 (查询)

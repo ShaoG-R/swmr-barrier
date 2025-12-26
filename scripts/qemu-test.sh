@@ -30,13 +30,18 @@ if [ ! -f "vmlinuz-vanilla" ]; then
     echo "Extracting kernel from ISO..."
     # 7z is pre-installed on GitHub Actions ubuntu-latest runners
     if command -v 7z >/dev/null 2>&1; then
-        7z e "$ISO_NAME" "boot/vmlinuz-vanilla" -y > /dev/null
+        # In the ISO, the kernel is at boot/vmlinuz
+        7z e "$ISO_NAME" "boot/vmlinuz" -y > /dev/null
+        # Rename to match expected filename
+        if [ -f "vmlinuz" ]; then
+            mv vmlinuz vmlinuz-vanilla
+        fi
     else
         # Fallback to mount (requires sudo)
         echo "7z not found, using sudo mount..."
         mkdir -p mnt_iso
         sudo mount -o loop "$ISO_NAME" mnt_iso
-        cp mnt_iso/boot/vmlinuz-vanilla .
+        cp mnt_iso/boot/vmlinuz ./vmlinuz-vanilla
         sudo umount mnt_iso
         rmdir mnt_iso
     fi

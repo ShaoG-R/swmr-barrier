@@ -32,7 +32,7 @@ cfg_if! {
 // 2. Linux 真实实现 (直接使用 libc)
 // ============================================================================
     else if #[cfg(target_os = "linux")] {
-        use std::sync::atomic::{fence, compiler_fence, Ordering, AtomicI32};
+        use core::sync::atomic::{fence, compiler_fence, Ordering, AtomicI32};
         use libc::{syscall, c_int, c_long};
 
         // --------------------------------------------------------------------
@@ -179,7 +179,7 @@ cfg_if! {
 // 4. 其他平台 / Fallback
 // ============================================================================
     else {
-        use std::sync::atomic::{fence, Ordering};
+        use core::sync::atomic::{fence, Ordering};
 
         #[inline]
         pub(crate) fn heavy_barrier_impl() {

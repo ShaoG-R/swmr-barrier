@@ -45,7 +45,7 @@ pub fn light_barrier() {
 ///
 /// Returns `true` if OS-accelerated barriers are in use.
 ///
-/// * **Linux (Kernel 4.14+)**: Returns `true` if `MEMBARRIER_CMD_PRIVATE_EXPEDITED` is available.
+/// * **Linux (Kernel 4.3+)**: Returns `true` if `MEMBARRIER_CMD_PRIVATE_EXPEDITED` (4.14+) or `MEMBARRIER_CMD_SHARED` (4.3+) is available.
 /// * **Windows (Vista+)**: Always returns `true`.
 /// * **Other platforms / Loom**: Always returns `false`.
 ///
@@ -55,7 +55,7 @@ pub fn light_barrier() {
 ///
 /// 如果正在使用 OS 加速屏障，返回 `true`。
 ///
-/// * **Linux (Kernel 4.14+)**：如果 `MEMBARRIER_CMD_PRIVATE_EXPEDITED` 可用，返回 `true`。
+/// * **Linux (Kernel 4.3+)**：如果 `MEMBARRIER_CMD_PRIVATE_EXPEDITED` (4.14+) 或 `MEMBARRIER_CMD_SHARED` (4.3+) 可用，返回 `true`。
 #[inline]
 #[cfg(all(target_os = "linux", not(feature = "loom")))]
 pub fn is_accelerated() -> bool {

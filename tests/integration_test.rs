@@ -6,8 +6,8 @@
 
 #![cfg(not(feature = "loom"))]
 
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use swmr_barrier::{heavy_barrier, light_barrier};
 
@@ -285,18 +285,19 @@ fn test_ping_pong() {
 
 /// Linux-specific test: Verify that OS-accelerated barriers (membarrier) are enabled.
 ///
-/// This test ensures that on modern Linux kernels (4.14+), the library successfully
-/// registers and uses MEMBARRIER_CMD_PRIVATE_EXPEDITED for zero-cost reader barriers.
+/// This test ensures that on Linux kernels 4.3+, the library successfully
+/// registers and uses either MEMBARRIER_CMD_PRIVATE_EXPEDITED (4.14+) or MEMBARRIER_CMD_SHARED (4.3+)
+/// for zero-cost reader barriers.
 ///
-/// 此测试确保在现代 Linux 内核 (4.14+) 上，库成功注册并使用
-/// MEMBARRIER_CMD_PRIVATE_EXPEDITED 实现零开销读取屏障。
+/// 此测试确保在 Linux 内核 4.3+ 上，库成功注册并使用
+/// MEMBARRIER_CMD_PRIVATE_EXPEDITED (4.14+) 或 MEMBARRIER_CMD_SHARED (4.3+) 实现零开销读取屏障。
 #[test]
 #[cfg(target_os = "linux")]
 fn test_linux_membarrier_acceleration_enabled() {
     assert!(
         swmr_barrier::is_accelerated(),
-        "MEMBARRIER_CMD_PRIVATE_EXPEDITED should be supported on Linux kernel 4.14+. \
-         If this test fails, either the kernel is too old or membarrier registration failed."
+        "MEMBARRIER (SHARED or PRIVATE_EXPEDITED) should be supported on Linux kernel 4.3+. \
+         If this test fails, either the kernel is too old (< 4.3) or membarrier registration failed."
     );
     println!("Linux membarrier acceleration is enabled (IS_ACCELERATED = true)");
 }

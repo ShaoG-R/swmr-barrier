@@ -16,11 +16,11 @@ TEST_BINARY=$(readlink -f "$TEST_BINARY")
 echo "Preparing QEMU environment for $TEST_BINARY..."
 
 # 1. Download Alpine 3.7 Kernel (Linux 4.9.65)
-# We use the 'virt' flavor which is optimized for virtual machines
-KERNEL_URL="http://dl-cdn.alpinelinux.org/alpine/v3.7/releases/x86_64/netboot/vmlinuz-virt"
-if [ ! -f "vmlinuz-virt" ]; then
+# We use 'vanilla' flavor which is more compatible with standard QEMU boot than 'virt' on older versions
+KERNEL_URL="http://dl-cdn.alpinelinux.org/alpine/v3.7/releases/x86_64/netboot/vmlinuz-vanilla"
+if [ ! -f "vmlinuz-vanilla" ]; then
     echo "Downloading kernel..."
-    curl -sL -o vmlinuz-virt "$KERNEL_URL"
+    curl -sL -o vmlinuz-vanilla "$KERNEL_URL"
 fi
 
 # 2. Create Initramfs
@@ -82,10 +82,10 @@ echo "Booting QEMU..."
 # -monitor none: Disable QEMU monitor
 # -no-reboot: Exit QEMU when guest reboots/shuts down
 qemu-system-x86_64 \
-    -kernel vmlinuz-virt \
+    -kernel vmlinuz-vanilla \
     -initrd initramfs.img \
     -nographic \
-    -append "console=ttyS0 panic=1" \
+    -append "console=ttyS0 panic=1 init=/init" \
     -monitor none \
     -no-reboot
 

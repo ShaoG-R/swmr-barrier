@@ -85,7 +85,7 @@ qemu-system-x86_64 \
     -kernel vmlinuz-vanilla \
     -initrd initramfs.img \
     -nographic \
-    -append "console=ttyS0 panic=1 init=/init" \
+    -append "console=ttyS0 panic=1 init=/init ramdisk_size=102400" \
     -monitor none \
     -no-reboot
 

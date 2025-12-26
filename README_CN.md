@@ -79,12 +79,13 @@ fn main() {
 | 平台 | 实现方式 | 开销 (读取者) | 开销 (写入者) |
 |----------|----------------|-------------------|-------------------|
 | **Linux** (Kernel 4.14+) | `syscall(SYS_membarrier, PRIVATE_EXPEDITED)` | **零** (编译器屏障) | 高 (IPI 广播) |
-| **Linux** (旧内核) | `fence(SeqCst)` 回退 | 高 (CPU 屏障) | 高 (CPU 屏障) |
+| **Linux** (Kernel 4.3+) | `syscall(SYS_membarrier, SHARED)` | **零** (编译器屏障) | 高 (IPI 广播) |
+| **Linux** (Pre 4.3) | `fence(SeqCst)` 回退 | 高 (CPU 屏障) | 高 (CPU 屏障) |
 | **Windows** (Vista+) | `FlushProcessWriteBuffers` | **零** (编译器屏障) | 高 (系统调用) |
 | **macOS / 其他** | `fence(SeqCst)` | 高 (CPU 屏障) | 高 (CPU 屏障) |
 | **Loom** | `loom::sync::atomic::fence` | 模拟 | 模拟 |
 
-*注意：本库直接使用 `libc` 调用 `syscall(SYS_membarrier, ...)` 系统调用，在运行时自动检测内核支持。不支持 `MEMBARRIER_CMD_PRIVATE_EXPEDITED` 的旧版 Linux 内核（< 4.14）将回退到 `fence(SeqCst)`。*
+*注意：本库直接使用 `libc` 调用 `syscall(SYS_membarrier, ...)` 系统调用，在运行时自动检测内核支持。不支持 `MEMBARRIER_CMD_PRIVATE_EXPEDITED` 的 Linux 内核（< 4.14）将尝试使用 `MEMBARRIER_CMD_SHARED` (4.3+)。早于 4.3 的内核将回退到 `fence(SeqCst)`。*
 
 ## Loom 测试
 

@@ -79,12 +79,13 @@ fn main() {
 | Platform | Implementation | Overhead (Reader) | Overhead (Writer) |
 |----------|----------------|-------------------|-------------------|
 | **Linux** (Kernel 4.14+) | `syscall(SYS_membarrier, PRIVATE_EXPEDITED)` | **Zero** (Compiler Fence) | High (IPI Broadcast) |
-| **Linux** (Older Kernels) | `fence(SeqCst)` fallback | High (CPU Fence) | High (CPU Fence) |
+| **Linux** (Kernel 4.3+) | `syscall(SYS_membarrier, SHARED)` | **Zero** (Compiler Fence) | High (IPI Broadcast) |
+| **Linux** (Pre 4.3) | `fence(SeqCst)` fallback | High (CPU Fence) | High (CPU Fence) |
 | **Windows** (Vista+) | `FlushProcessWriteBuffers` | **Zero** (Compiler Fence) | High (System Call) |
 | **macOS / Others** | `fence(SeqCst)` | High (CPU Fence) | High (CPU Fence) |
 | **Loom** | `loom::sync::atomic::fence` | Simulated | Simulated |
 
-*Note: This crate directly uses `libc` to invoke `syscall(SYS_membarrier, ...)` and automatically detects kernel support at runtime. Older Linux kernels (< 4.14) that do not support `MEMBARRIER_CMD_PRIVATE_EXPEDITED` will fall back to `fence(SeqCst)`.*
+*Note: This crate directly uses `libc` to invoke `syscall(SYS_membarrier, ...)` and automatically detects kernel support at runtime. Older Linux kernels that do not support `MEMBARRIER_CMD_PRIVATE_EXPEDITED` (pre-4.14) will try `MEMBARRIER_CMD_SHARED` (4.3+). Kernels older than 4.3 will fall back to `fence(SeqCst)`.*
 
 ## Loom Testing
 
